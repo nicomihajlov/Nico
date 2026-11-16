@@ -177,6 +177,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .list li::before { flex: none; font-family: var(--f-mono); font-weight: 600; }
 .list.pro li::before { content: "+"; color: var(--long); }
 .list.con li::before { content: "!"; color: var(--short); }
+.list.rules li::before { content: "✓"; color: var(--accent); }
 
 details.method { border-top: 1px solid var(--line); padding-top: 10px; }
 details.method summary { cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; display: flex; justify-content: space-between; }
@@ -296,6 +297,7 @@ footer strong { color: var(--ink); }
             <label class="chip"><input type="checkbox" id="s-smc" checked><span>Smart Money / ICT</span></label>
             <label class="chip"><input type="checkbox" id="s-trend" checked><span>Trend &amp; Indikatoren</span></label>
             <label class="chip"><input type="checkbox" id="s-candles" checked><span>Candlestick-Muster</span></label>
+            <label class="chip"><input type="checkbox" id="s-orb"><span>Opening-Range-Breakout</span></label>
           </div>
         </div>
         <div id="availNote" class="avail" hidden></div>
@@ -320,7 +322,7 @@ footer strong { color: var(--ink); }
   </section>
 
   <footer>
-    <strong>Wichtig:</strong> Die Vorschläge erstellt eine KI anhand deines Screenshots. Sie kann Preise falsch ablesen oder Muster falsch deuten. Das ist keine Anlageberatung. Prüfe jedes Level selbst im Chart, bevor du eine Order setzt, und riskiere nur Geld, dessen Verlust du verkraften kannst. Die Linien auf dem Bild sind nur ungefähr platziert; maßgeblich sind die Preise in der Tabelle.
+    <strong>Wichtig:</strong> Die Vorschläge erstellt eine KI anhand deines Screenshots. Sie kann Preise falsch ablesen oder Muster falsch deuten. Das ist keine Anlageberatung. Prüfe jedes Level selbst im Chart, bevor du eine Order setzt, und riskiere nur Geld, dessen Verlust du verkraften kannst. Die Linien auf dem Bild sind nur ungefähr platziert; maßgeblich sind die Preise in der Tabelle. Ein Stop-Loss ist ein Plan, keine Garantie: Bei Kurslücken oder schnellen Bewegungen kann er schlechter ausgeführt werden. Die Regeln für Einstieg, Stop und Ziel orientieren sich am frei verfügbaren „day-trader-skill“ von Jake Schincariol (MIT-Lizenz), angepasst auf Krypto.
   </footer>
 </div>
 
@@ -405,6 +407,7 @@ footer strong { color: var(--ink); }
       keyLevels, analysis: r.analysis && typeof r.analysis === "object" ? r.analysis : {},
       confluence: arr(r.confluence), risks: arr(r.risks),
       invalidation: typeof r.invalidation === "string" ? r.invalidation : "",
+      timeStop: typeof r.timeStop === "string" ? r.timeStop : "",
       watchFor: typeof r.watchFor === "string" ? r.watchFor : "",
     };
   }
@@ -418,6 +421,13 @@ footer strong { color: var(--ink); }
       if (r.verdict === "short" && !(t < e && e < s)) w.push("Die Levels passen nicht zu einem Short (Stop muss über dem Einstieg, Ziel darunter liegen). Bitte neu analysieren.");
       const c = crv(r);
       if (c != null && c < 1) w.push("Das Chance-Risiko-Verhältnis liegt unter 1:1. Der mögliche Verlust ist größer als der Gewinn.");
+      if (Math.abs(e - s) < e * 0.0005) w.push("Der Stop liegt weniger als 0,05 % vom Einstieg entfernt. So eng löst ihn schon der normale Spread aus.");
+      const cp = r.chart.currentPrice, type = String(r.entry?.type || "").toLowerCase();
+      if (cp != null && (type === "stop" || type === "market")) {
+        const risk = Math.abs(e - s);
+        if ((r.verdict === "long" && cp - e > risk * 0.5) || (r.verdict === "short" && e - cp > risk * 0.5))
+          w.push("Der Kurs ist dem Einstieg schon weit davongelaufen. Ein späterer Einstieg ist ein anderer Trade: Warte lieber auf einen Rücksetzer.");
+      }
     }
     if (state.params?.dir && state.params.dir !== "both" && ["long", "short"].includes(r.verdict) && r.verdict !== state.params.dir)
       w.push("Die Analyse schlägt eine andere Richtung vor, als du ausgewählt hast.");
@@ -474,7 +484,7 @@ footer strong { color: var(--ink); }
   // ---------- result rendering ----------
   const METHOD_TITLES = {
     structure: "Marktstruktur", supportResistance: "Support / Resistance", smartMoney: "Smart Money / ICT",
-    indicators: "Trend & Indikatoren", candles: "Candlestick-Muster",
+    indicators: "Trend & Indikatoren", candles: "Candlestick-Muster", openingRange: "Opening Range",
   };
 
   function renderResult() {
@@ -522,6 +532,13 @@ footer strong { color: var(--ink); }
           </div>` : ""}
         ${r.entry?.trigger && r.verdict !== "kein_trade" ? `<div class="note trigger"><b>Wann einsteigen</b>${esc(r.entry.trigger)}</div>` : ""}
         ${r.invalidation ? `<div class="note"><b>Idee ungültig, wenn</b>${esc(r.invalidation)}</div>` : ""}
+        ${r.timeStop && r.verdict !== "kein_trade" ? `<div class="note"><b>Zeitlimit</b>${esc(r.timeStop)}</div>` : ""}
+        ${hasLevels && r.verdict !== "kein_trade" ? `<div class="list rules"><h3>Regeln für diesen Trade</h3><ul>
+          <li>Stop und Ziel stehen fest, bevor du einsteigst.</li>
+          <li>Einstieg nur auf Kerzenschluss. Ein Docht über dem Level ist kein Signal.</li>
+          <li>Den Stop nie weiter vom Einstieg wegschieben, wenn der Trade läuft.</li>
+          <li>Ein Stop ist ein Plan, keine Garantie: Bei schnellen Bewegungen kann er schlechter ausgeführt werden.</li>
+        </ul></div>` : ""}
         ${warns.map((w) => `<div class="note warn"><b>Achtung</b>${esc(w)}</div>`).join("")}
         ${r.confluence.length || r.risks.length ? `<div class="two">
           ${r.confluence.length ? `<div class="list pro"><h3>Was dafür spricht</h3><ul>${r.confluence.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
@@ -635,8 +652,9 @@ footer strong { color: var(--ink); }
     smc: "Smart Money Concepts / ICT: Marktstruktur (Break of Structure, Change of Character), Order Blocks, Fair Value Gaps, Liquidität über Hochs und unter Tiefs (Sweeps), Premium/Discount.",
     trend: "Trend & Indikatoren: Trendlinien, höhere Hochs/Tiefs, EMAs, VWAP, RSI und andere Indikatoren. Werte nur Indikatoren aus, die im Bild wirklich zu sehen sind.",
     candles: "Candlestick-Muster: Engulfing, Pin Bar/Hammer, Doji, Inside Bar, Ablehnungsdochte an wichtigen Levels.",
+    orb: "Opening-Range-Breakout: Hoch und Tief der ersten 15 Minuten nach einer Session-Eröffnung (Tagesöffnung 00:00 UTC, London 08:00 UTC oder New York 13:30 UTC, nur wenn im Chart erkennbar). Einstieg erst, wenn eine Kerze über dem Range-Hoch (Long) bzw. unter dem Range-Tief (Short) SCHLIESST. Stop an der Range-Mitte oder am anderen Ende der Range.",
   };
-  const ANALYSIS_KEY = { sr: "supportResistance", smc: "smartMoney", trend: "indicators", candles: "candles" };
+  const ANALYSIS_KEY = { sr: "supportResistance", smc: "smartMoney", trend: "indicators", candles: "candles", orb: "openingRange" };
 
   function readParams() {
     const strats = Object.keys(STRATS).filter((k) => $("#s-" + k).checked);
@@ -665,9 +683,11 @@ ${p.strats.map((k) => "- " + STRATS[k]).join("\n")}
 Vorgehen:
 1. Lies die Preisachse (meist rechts) genau ab. Jeder Preis, den du nennst, muss zu den Achsenbeschriftungen passen und im sichtbaren Bereich oder knapp daneben liegen. Ist die Achse nicht lesbar, setze "priceAxisReadable": false und schätze so gut es geht.
 2. Bestimme Marktstruktur und Trend auf dieser Zeiteinheit.
-3. Wähle das beste Setup für einen Daytrade. Einstieg an einem sinnvollen Level (Retest, Order Block, FVG, Support/Resistance), nicht mitten in der Range und nicht hinterherlaufend nach einer großen Kerze.
-4. Stop-Loss hinter ein Strukturlevel (Swing-Tief/-Hoch, Order Block, Liquiditätszone), nicht so eng, dass normales Rauschen ihn auslöst.
-5. Take-Profit am nächsten realistischen Ziel (nächster Widerstand bzw. Support, Liquidität über Hochs/unter Tiefs, offene FVG). Strebe ein Chance-Risiko-Verhältnis von mindestens 1:1,5 an.
+3. Wähle das beste Setup für einen Daytrade. Einstieg an einem sinnvollen Level (Retest, Order Block, FVG, Support/Resistance, Range-Ausbruch), nicht mitten in der Range und nicht hinterherlaufend nach einer großen Kerze. Ein Einstiegssignal ist erst der SCHLUSS einer Kerze über (Long) bzw. unter (Short) dem Level. Ein Docht darüber zählt nicht. Schreibe in "trigger" genau, welche Kerze auf welcher Zeiteinheit worüber oder worunter schließen muss.
+4. Stop-Loss dort, wo das Setup gescheitert ist: hinter ein Strukturlevel (Swing-Tief/-Hoch, Order Block, Liquiditätszone), bei einem Range-Ausbruch an die Range-Mitte, oder etwa 1 bis 1,5 × ATR vom Einstieg. Runde den Stop vom Einstieg weg. Abstand mindestens 0,05 % vom Einstieg, besser so weit, dass normales Rauschen ihn nicht auslöst. Nenne in "reason", nach welcher Regel der Stop sitzt.
+5. Take-Profit: Standard ist 2R (Einstieg plus zweimal der Abstand Einstieg–Stop). Liegt ein starkes Level (Widerstand, Support, Liquidität, offene FVG) vorher, nimm dieses Level, solange das Chance-Risiko-Verhältnis mindestens 1:1,5 bleibt. Nenne in "reason", ob das Ziel 2R oder ein Level ist.
+5b. Wenn das Einstiegssignal schon mehr als eine Kerze zurückliegt und der Kurs weggelaufen ist, sag das in "risks": Ein späterer Einstieg ist ein anderer Trade. Schlage dann lieber einen Pullback-Einstieg vor oder "kein_trade".
+5c. "timeStop": ein Zeitlimit für den Daytrade, z. B. bis wann die Position spätestens geschlossen wird (etwa zum Ende der New-York-Session), damit sie nicht über Nacht läuft.
 6. Gibt es kein sauberes Setup, oder passt es nicht zur erlaubten Richtung, antworte mit "verdict": "kein_trade" und beschreibe in "watchFor" konkret mit Preisen, auf welches Szenario man warten sollte. Ein mögliches Szenario darfst du dann trotzdem in entry/stopLoss/takeProfit eintragen, sonst null. Lieber kein Trade als ein schlechter.
 7. "confidence" von 1 bis 10: wie klar und sauber das Setup ist.
 
@@ -683,10 +703,11 @@ Antworte NUR mit einem JSON-Objekt in genau dieser Form. Texte auf Deutsch, kurz
   "stopLoss": { "price": 63700, "y": 0.68, "reason": "Warum genau hier." },
   "takeProfit": { "price": 64900, "y": 0.3, "reason": "Warum genau hier." },
   "keyLevels": [ { "price": 64000, "y": 0.58, "kind": "support" | "resistance" | "orderblock" | "fvg" | "liquidity" | "other", "label": "Kurzer Name" } ],
-  "analysis": { "structure": "…", "supportResistance": "…", "smartMoney": "…", "indicators": "…", "candles": "…" },
+  "analysis": { "structure": "…", "supportResistance": "…", "smartMoney": "…", "indicators": "…", "candles": "…", "openingRange": "…" },
   "confluence": ["Kurzer Punkt, der für den Trade spricht"],
   "risks": ["Kurzer Punkt, der dagegen spricht"],
   "invalidation": "Wann die Idee nicht mehr gilt, mit Preis.",
+  "timeStop": "Bis wann der Trade spätestens geschlossen wird.",
   "watchFor": null
 }
 Gib 2 bis 5 keyLevels an.${off.length ? ` Setze in "analysis" ${off.join(", ")} auf null.` : ""}`;
@@ -932,6 +953,7 @@ Antworte auf Deutsch, kurz und konkret (höchstens 150 Wörter), mit Preisen wo 
       confluence: ["Retest des alten Range-Hochs", "Liquiditäts-Sweep mit Rückeroberung", "Bullisches Engulfing", "Höhere Tiefs seit dem Ausbruch"],
       risks: ["Schluss unter 96.890 würde den Ausbruch als Fehlausbruch zeigen", "Zur US-Eröffnung oft erhöhte Volatilität"],
       invalidation: "15m-Schlusskurs unter 96.760.",
+      timeStop: "Spätestens zum Ende der New-York-Session (22:00 MEZ) schließen, Ziel erreicht oder nicht.",
       watchFor: null,
     });
   }
