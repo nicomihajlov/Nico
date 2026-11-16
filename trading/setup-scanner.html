@@ -1,0 +1,973 @@
+<title>Setup Scanner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: trading-desk split. Chart and inputs on the left, the trade plan on the right, history below. */
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --surface-2: #f5f7fa;
+  --ink: #121923;
+  --muted: #5a6575;
+  --line: #d8dee7;
+  --accent: #b86f0a;       /* entry / signal amber */
+  --accent-ink: #ffffff;
+  --long: #12804c;
+  --short: #c8322a;
+  --neutral: #7a6a3a;
+  --chart-bg: #ffffff;
+  --chart-grid: #e8ecf1;
+  --shadow: 0 1px 2px rgba(18,25,35,.06), 0 6px 24px rgba(18,25,35,.06);
+  --f-display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1218; --surface: #141b24; --surface-2: #1a232e; --ink: #e5eaf1; --muted: #8b97a8;
+    --line: #253041; --accent: #f0a73a; --accent-ink: #1a1206; --long: #34c27a; --short: #f2564d;
+    --neutral: #d8b65e; --chart-bg: #10161e; --chart-grid: #1c2633;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1218; --surface: #141b24; --surface-2: #1a232e; --ink: #e5eaf1; --muted: #8b97a8;
+  --line: #253041; --accent: #f0a73a; --accent-ink: #1a1206; --long: #34c27a; --short: #f2564d;
+  --neutral: #d8b65e; --chart-bg: #10161e; --chart-grid: #1c2633;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 40px;
+}
+.wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+.mono, .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand svg { width: 30px; height: 30px; flex: none; }
+.brand h1 { font-size: 21px; letter-spacing: -.01em; }
+.brand .sub { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.pill-warn { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; }
+
+/* Main grid */
+.layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 920px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); }
+
+/* Chart area */
+.chart-card { overflow: hidden; }
+.chart-card.drag { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.chart-wrap { position: relative; background: var(--chart-bg); line-height: 0; }
+.chart-wrap img { display: block; width: 100%; max-width: 100%; height: auto; }
+.example-badge {
+  position: absolute; top: 10px; left: 10px; line-height: 1.2;
+  background: var(--accent); color: var(--accent-ink); font: 600 11px var(--f-mono);
+  letter-spacing: .06em; text-transform: uppercase; padding: 4px 8px; border-radius: 4px;
+}
+.overlay { position: absolute; inset: 0; pointer-events: none; line-height: 1.2; }
+.ol-line { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid var(--c); }
+.ol-line.key { border-top-style: dashed; opacity: .75; border-top-width: 1px; }
+.ol-tag {
+  position: absolute; right: 9%; transform: translateY(-50%);
+  background: var(--c); color: #fff; font: 600 11px var(--f-mono); padding: 2px 6px; border-radius: 3px; white-space: nowrap;
+}
+.ol-line.key .ol-tag { right: auto; left: 6px; background: var(--surface); color: var(--ink); border: 1px solid var(--c); font-weight: 400; }
+.ol-box { position: absolute; left: 60%; width: 27%; }
+.ol-box.win { background: color-mix(in srgb, var(--long) 22%, transparent); }
+.ol-box.loss { background: color-mix(in srgb, var(--short) 22%, transparent); }
+.k-entry { --c: var(--accent); } .k-sl { --c: var(--short); } .k-tp { --c: var(--long); }
+.k-support { --c: var(--long); } .k-resistance { --c: var(--short); } .k-orderblock, .k-fvg { --c: #6f7dd6; } .k-liquidity { --c: var(--neutral); } .k-other { --c: var(--muted); }
+@media (max-width: 560px) { .ol-tag { font-size: 9.5px; padding: 1px 4px; } .ol-line.key .ol-tag { display: none; } }
+
+.chart-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.chart-bar .hint { color: var(--muted); font-size: 13px; flex: 1 1 200px; min-width: 0; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+.toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px;
+  padding: 9px 14px; font-weight: 600; font-size: 14px; cursor: pointer; line-height: 1.2;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.big { width: 100%; padding: 13px 16px; font-size: 15px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+.btn.ghost { background: transparent; }
+
+/* Form */
+.params { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.params h2 { font-size: 15px; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 480px) { .fields { grid-template-columns: minmax(0, 1fr); } }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field.full { grid-column: 1 / -1; }
+.field > label, .group-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.field input, .field select, .field textarea, .ask textarea {
+  width: 100%; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 9px 11px; min-width: 0;
+}
+.field textarea, .ask textarea { resize: vertical; min-height: 44px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { position: relative; }
+.chip input { position: absolute; opacity: 0; pointer-events: none; }
+.chip span {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface-2); font-size: 13px; cursor: pointer; color: var(--muted);
+}
+.chip span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; }
+.chip input:checked + span { color: var(--ink); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.chip input:checked + span::before { background: var(--accent); border-color: var(--accent); }
+.chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row-actions { display: flex; gap: 10px; }
+.row-actions .btn.big { flex: 1; }
+.avail { font-size: 13px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--short) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--short) 35%, var(--line)); }
+
+/* Result */
+.result { padding: 18px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.res-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.verdict { font: 700 15px var(--f-display); letter-spacing: .06em; padding: 7px 14px; border-radius: 6px; color: #fff; }
+.v-long { background: var(--long); } .v-short { background: var(--short); } .v-none { background: var(--neutral); color: var(--surface); }
+.meta { color: var(--muted); font-size: 13px; }
+.conf { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.conf .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.pips { display: flex; gap: 3px; }
+.pips i { width: 9px; height: 14px; border-radius: 2px; background: var(--line); }
+.pips i.on { background: var(--accent); }
+.summary { font-size: 16px; line-height: 1.55; margin: 0; }
+
+.levels { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.lv { display: grid; grid-template-columns: 6px minmax(0, 1fr) auto; gap: 0 12px; align-items: center; padding: 11px 14px 11px 0; border-bottom: 1px solid var(--line); }
+.lv:last-child { border-bottom: 0; }
+.lv .bar { align-self: stretch; background: var(--c); }
+.lv .name { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.lv .why { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.lv .price { font: 600 18px var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.lv .dist { font: 400 12px var(--f-mono); color: var(--muted); text-align: right; }
+.lv-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 14px; background: var(--surface-2); }
+.crv { font: 600 15px var(--f-mono); }
+.crv small { font: 500 11px var(--f-body); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-right: 8px; }
+
+.note { padding: 11px 13px; border-radius: 8px; font-size: 14px; border: 1px solid var(--line); background: var(--surface-2); }
+.note b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 2px; }
+.note.trigger { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.note.warn { border-color: color-mix(in srgb, var(--short) 45%, var(--line)); background: color-mix(in srgb, var(--short) 8%, var(--surface)); }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 520px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.list h3 { font-size: 13px; margin-bottom: 6px; }
+.list ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+.list li { display: flex; gap: 8px; }
+.list li::before { flex: none; font-family: var(--f-mono); font-weight: 600; }
+.list.pro li::before { content: "+"; color: var(--long); }
+.list.con li::before { content: "!"; color: var(--short); }
+
+details.method { border-top: 1px solid var(--line); padding-top: 10px; }
+details.method summary { cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; display: flex; justify-content: space-between; }
+details.method summary::after { content: "+"; font-family: var(--f-mono); color: var(--muted); }
+details.method[open] summary::after { content: "−"; }
+details.method p { margin: 8px 0 0; font-size: 14px; color: var(--ink); max-width: 65ch; }
+.methods { display: flex; flex-direction: column; gap: 10px; }
+
+.ask { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+.ask-row { display: flex; gap: 8px; align-items: flex-end; }
+.ask-row textarea { flex: 1; }
+.qa { display: flex; flex-direction: column; gap: 10px; }
+.qa .q { font-weight: 600; font-size: 14px; }
+.qa .a { font-size: 14px; white-space: pre-wrap; color: var(--ink); margin-top: 2px; }
+
+.empty { padding: 28px 20px; text-align: center; color: var(--muted); display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.empty h2 { color: var(--ink); font-size: 18px; }
+.busy { padding: 26px 20px; display: flex; flex-direction: column; gap: 14px; align-items: center; text-align: center; }
+.scan { width: 100%; max-width: 280px; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; position: relative; }
+.scan::after { content: ""; position: absolute; inset: 0; width: 35%; background: var(--accent); border-radius: 2px; animation: scan 1.4s ease-in-out infinite; }
+@keyframes scan { 0% { transform: translateX(-100%); } 100% { transform: translateX(290%); } }
+@media (prefers-reduced-motion: reduce) { .scan::after { animation: none; width: 100%; opacity: .5; } }
+.busy .elapsed { font: 400 13px var(--f-mono); color: var(--muted); }
+
+/* History */
+.history { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.history-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.history h2 { font-size: 15px; }
+.history .meta { font-size: 12px; }
+.hist-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.hist { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface-2); text-align: left; padding: 0; cursor: pointer; }
+.hist:hover { border-color: var(--muted); }
+.hist img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: var(--chart-bg); }
+.hist .hb { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.hist .ht { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+.hist .hv { font: 700 10px var(--f-display); letter-spacing: .06em; padding: 2px 6px; border-radius: 3px; color: #fff; }
+.hist .hd { font-size: 12px; color: var(--muted); }
+.hist-del { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 14px; line-height: 1; }
+.hist-empty { color: var(--muted); font-size: 14px; }
+
+footer { color: var(--muted); font-size: 12.5px; max-width: 80ch; line-height: 1.55; }
+footer strong { color: var(--ink); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="8" fill="var(--ink)"/>
+        <line x1="10" y1="7" x2="10" y2="25" stroke="var(--short)" stroke-width="1.6"/>
+        <rect x="7.5" y="11" width="5" height="9" rx="1" fill="var(--short)"/>
+        <line x1="21" y1="5" x2="21" y2="23" stroke="var(--long)" stroke-width="1.6"/>
+        <rect x="18.5" y="8" width="5" height="11" rx="1" fill="var(--long)"/>
+        <line x1="4" y1="15" x2="28" y2="15" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="2 2"/>
+      </svg>
+      <div>
+        <h1>Setup Scanner</h1>
+        <div class="sub">Krypto · Daytrading · Chart-Analyse</div>
+      </div>
+    </div>
+    <span class="pill-warn">Keine Anlageberatung</span>
+  </header>
+
+  <div class="layout">
+    <div class="col">
+      <section class="card chart-card" id="chartCard" aria-label="Chart">
+        <div class="chart-wrap" id="chartWrap">
+          <img id="chartImg" alt="Dein Trading-Chart">
+          <div class="overlay" id="overlay"></div>
+          <span class="example-badge" id="exampleBadge">Beispiel-Chart</span>
+        </div>
+        <div class="chart-bar">
+          <label class="btn primary" for="file">Chart hochladen</label>
+          <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/gif" class="sr">
+          <span class="hint">oder Screenshot hierher ziehen bzw. mit Strg+V einfügen</span>
+          <label class="toggle"><input type="checkbox" id="showOverlay" checked> Linien zeigen</label>
+        </div>
+      </section>
+
+      <form class="card params" id="form" autocomplete="off">
+        <h2>Angaben zum Trade</h2>
+        <div class="fields">
+          <div class="field">
+            <label for="f-symbol">Coin / Paar</label>
+            <input id="f-symbol" placeholder="z. B. BTC/USDT" maxlength="30">
+          </div>
+          <div class="field">
+            <label for="f-tf">Zeiteinheit</label>
+            <select id="f-tf">
+              <option value="">Aus Chart lesen</option>
+              <option>1m</option><option>3m</option><option>5m</option><option>15m</option>
+              <option>30m</option><option>1h</option><option>4h</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-dir">Richtung</label>
+            <select id="f-dir">
+              <option value="both">Long oder Short</option>
+              <option value="long">Nur Long</option>
+              <option value="short">Nur Short</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-price">Aktueller Preis (optional)</label>
+            <input id="f-price" inputmode="decimal" placeholder="Vom Chart lesen">
+          </div>
+          <div class="field full">
+            <label for="f-note">Notiz (optional)</label>
+            <textarea id="f-note" rows="2" maxlength="500" placeholder="z. B. RSI unten eingeblendet, News um 14:30, höhere Zeiteinheit ist bärisch"></textarea>
+          </div>
+        </div>
+        <div class="field">
+          <span class="group-label">Methoden</span>
+          <div class="chips">
+            <label class="chip"><input type="checkbox" id="s-sr" checked><span>Support / Resistance</span></label>
+            <label class="chip"><input type="checkbox" id="s-smc" checked><span>Smart Money / ICT</span></label>
+            <label class="chip"><input type="checkbox" id="s-trend" checked><span>Trend &amp; Indikatoren</span></label>
+            <label class="chip"><input type="checkbox" id="s-candles" checked><span>Candlestick-Muster</span></label>
+          </div>
+        </div>
+        <div id="availNote" class="avail" hidden></div>
+        <div class="row-actions">
+          <button type="submit" class="btn primary big" id="analyzeBtn">Chart analysieren</button>
+          <button type="button" class="btn" id="stopBtn" hidden>Stopp</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="col">
+      <section class="card" id="resultCard" aria-live="polite"></section>
+    </div>
+  </div>
+
+  <section class="card history" aria-label="Letzte Analysen">
+    <div class="history-head">
+      <h2>Letzte Analysen</h2>
+      <span class="meta">Nur in diesem Browser gespeichert</span>
+    </div>
+    <div class="hist-list" id="histList"></div>
+  </section>
+
+  <footer>
+    <strong>Wichtig:</strong> Die Vorschläge erstellt eine KI anhand deines Screenshots. Sie kann Preise falsch ablesen oder Muster falsch deuten. Das ist keine Anlageberatung. Prüfe jedes Level selbst im Chart, bevor du eine Order setzt, und riskiere nur Geld, dessen Verlust du verkraften kannst. Die Linien auf dem Bild sind nur ungefähr platziert; maßgeblich sind die Preise in der Tabelle.
+  </footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+  };
+  const HKEY = "setupScanner.history.v1";
+  const PKEY = "setupScanner.prefs.v1";
+
+  const state = {
+    sample: null, canSample: false, canImages: false,
+    blob: null, imgUrl: null, example: true,
+    result: null, params: null, ctl: null, timer: null, qa: [],
+  };
+
+  // ---------- helpers ----------
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  function toNum(v) {
+    if (typeof v === "number") return isFinite(v) ? v : null;
+    if (typeof v !== "string") return null;
+    let s = v.replace(/[\s'’$€]/g, "");
+    if (s.includes(",") && s.includes(".")) {
+      s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+    } else if (s.includes(",")) {
+      s = /,\d{3}$/.test(s) && s.split(",").length > 1 && !/^0,/.test(s) ? s.replace(/,/g, "") : s.replace(",", ".");
+    }
+    const n = parseFloat(s);
+    return isFinite(n) ? n : null;
+  }
+  function fmt(p) {
+    if (p == null) return "–";
+    const a = Math.abs(p);
+    const d = a >= 1000 ? 2 : a >= 1 ? 4 : 8;
+    return p.toLocaleString("de-DE", { maximumFractionDigits: d });
+  }
+  function pct(from, to) {
+    if (from == null || to == null || !from) return "";
+    const v = ((to - from) / from) * 100;
+    return (v > 0 ? "+" : "") + v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " %";
+  }
+  const dec1 = (v) => v.toLocaleString("de-DE", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+  const verdictLabel = (v) => (v === "long" ? "LONG" : v === "short" ? "SHORT" : "KEIN TRADE");
+  const verdictClass = (v) => (v === "long" ? "v-long" : v === "short" ? "v-short" : "v-none");
+
+  function crv(r) {
+    const e = r.entry?.price, s = r.stopLoss?.price, t = r.takeProfit?.price;
+    if (e == null || s == null || t == null) return null;
+    const risk = Math.abs(e - s), reward = Math.abs(t - e);
+    return risk > 0 ? reward / risk : null;
+  }
+
+  // ---------- normalize model output ----------
+  function normalize(raw) {
+    const r = raw && typeof raw === "object" ? raw : {};
+    const lvl = (o) => {
+      if (!o || typeof o !== "object") return null;
+      const price = toNum(o.price);
+      if (price == null) return null;
+      const y = toNum(o.y);
+      return { ...o, price, y: y != null && y >= 0 && y <= 1 ? y : null,
+        zoneLow: toNum(o.zoneLow), zoneHigh: toNum(o.zoneHigh) };
+    };
+    let v = String(r.verdict || "").toLowerCase().replace(/\s+/g, "_");
+    if (!["long", "short"].includes(v)) v = "kein_trade";
+    const conf = Math.max(0, Math.min(10, Math.round(toNum(r.confidence) ?? 0)));
+    const kinds = ["support", "resistance", "orderblock", "fvg", "liquidity", "other"];
+    const keyLevels = (Array.isArray(r.keyLevels) ? r.keyLevels : []).map(lvl).filter(Boolean).slice(0, 8)
+      .map((k) => ({ ...k, kind: kinds.includes(k.kind) ? k.kind : "other" }));
+    const arr = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === "string" && x.trim()).slice(0, 8) : []);
+    const chart = r.chart && typeof r.chart === "object" ? r.chart : {};
+    return {
+      verdict: v, confidence: conf,
+      chart: { symbol: chart.symbol || null, timeframe: chart.timeframe || null,
+        currentPrice: toNum(chart.currentPrice), priceAxisReadable: chart.priceAxisReadable !== false },
+      summary: typeof r.summary === "string" ? r.summary : "",
+      entry: lvl(r.entry), stopLoss: lvl(r.stopLoss), takeProfit: lvl(r.takeProfit),
+      keyLevels, analysis: r.analysis && typeof r.analysis === "object" ? r.analysis : {},
+      confluence: arr(r.confluence), risks: arr(r.risks),
+      invalidation: typeof r.invalidation === "string" ? r.invalidation : "",
+      watchFor: typeof r.watchFor === "string" ? r.watchFor : "",
+    };
+  }
+
+  function consistencyWarnings(r) {
+    const w = [];
+    const e = r.entry?.price, s = r.stopLoss?.price, t = r.takeProfit?.price;
+    if (!r.chart.priceAxisReadable) w.push("Die Preisachse war schlecht lesbar. Die Preise sind geschätzt. Lade am besten einen schärferen Screenshot mit sichtbarer Preisachse hoch.");
+    if (e != null && s != null && t != null) {
+      if (r.verdict === "long" && !(s < e && e < t)) w.push("Die Levels passen nicht zu einem Long (Stop muss unter dem Einstieg, Ziel darüber liegen). Bitte neu analysieren.");
+      if (r.verdict === "short" && !(t < e && e < s)) w.push("Die Levels passen nicht zu einem Short (Stop muss über dem Einstieg, Ziel darunter liegen). Bitte neu analysieren.");
+      const c = crv(r);
+      if (c != null && c < 1) w.push("Das Chance-Risiko-Verhältnis liegt unter 1:1. Der mögliche Verlust ist größer als der Gewinn.");
+    }
+    if (state.params?.dir && state.params.dir !== "both" && ["long", "short"].includes(r.verdict) && r.verdict !== state.params.dir)
+      w.push("Die Analyse schlägt eine andere Richtung vor, als du ausgewählt hast.");
+    return w;
+  }
+
+  // ---------- overlay ----------
+  function fitY(r) {
+    const pts = [r.entry, r.stopLoss, r.takeProfit, ...r.keyLevels].filter((l) => l && l.y != null);
+    if (pts.length < 2) return null;
+    const n = pts.length;
+    const mx = pts.reduce((a, p) => a + p.price, 0) / n, my = pts.reduce((a, p) => a + p.y, 0) / n;
+    let sxx = 0, sxy = 0;
+    for (const p of pts) { sxx += (p.price - mx) ** 2; sxy += (p.price - mx) * (p.y - my); }
+    if (sxx === 0) return null;
+    const a = sxy / sxx, b = my - a * mx;
+    if (!(a < 0)) return null;
+    const maxRes = Math.max(...pts.map((p) => Math.abs(a * p.price + b - p.y)));
+    if (maxRes > 0.12) return null;
+    return (price) => a * price + b;
+  }
+
+  function renderOverlay() {
+    const ov = $("#overlay");
+    ov.innerHTML = "";
+    const r = state.result;
+    if (!r || !$("#showOverlay").checked) return;
+    const Y = fitY(r);
+    if (!Y) return;
+    const inView = (y) => y >= 0 && y <= 1;
+    const html = [];
+    const e = r.entry?.price, s = r.stopLoss?.price, t = r.takeProfit?.price;
+    if (e != null && s != null && t != null && ["long", "short"].includes(r.verdict)) {
+      const ye = Y(e), ys = Y(s), yt = Y(t);
+      const box = (y1, y2, cls) => {
+        const top = Math.max(0, Math.min(y1, y2)), bot = Math.min(1, Math.max(y1, y2));
+        if (bot > top) html.push(`<div class="ol-box ${cls}" style="top:${top * 100}%;height:${(bot - top) * 100}%"></div>`);
+      };
+      box(ye, yt, "win"); box(ye, ys, "loss");
+    }
+    for (const k of r.keyLevels) {
+      const y = Y(k.price);
+      if (inView(y)) html.push(`<div class="ol-line key k-${k.kind}" style="top:${y * 100}%"><span class="ol-tag">${esc(k.label || "")} ${fmt(k.price)}</span></div>`);
+    }
+    const main = [["entry", "Entry", r.entry], ["sl", "SL", r.stopLoss], ["tp", "TP", r.takeProfit]];
+    for (const [k, lbl, l] of main) {
+      if (!l) continue;
+      const y = Y(l.price);
+      if (inView(y)) html.push(`<div class="ol-line k-${k}" style="top:${y * 100}%"><span class="ol-tag">${lbl} ${fmt(l.price)}</span></div>`);
+    }
+    ov.innerHTML = html.join("");
+  }
+
+  // ---------- result rendering ----------
+  const METHOD_TITLES = {
+    structure: "Marktstruktur", supportResistance: "Support / Resistance", smartMoney: "Smart Money / ICT",
+    indicators: "Trend & Indikatoren", candles: "Candlestick-Muster",
+  };
+
+  function renderResult() {
+    const r = state.result;
+    const card = $("#resultCard");
+    const c = crv(r);
+    const warns = consistencyWarnings(r);
+    const meta = [r.chart.symbol || state.params?.symbol, r.chart.timeframe || state.params?.tf].filter(Boolean).map(esc).join(" · ");
+    const pips = Array.from({ length: 10 }, (_, i) => `<i class="${i < r.confidence ? "on" : ""}"></i>`).join("");
+    const e = r.entry?.price;
+    const hasLevels = r.entry && r.stopLoss && r.takeProfit;
+    const lvRow = (cls, name, l, why) => `
+      <div class="lv ${cls}">
+        <span class="bar"></span>
+        <div><div class="name">${name}</div>${why ? `<div class="why">${esc(why)}</div>` : ""}</div>
+        <div><div class="price">${fmt(l.price)}</div>${cls !== "k-entry" ? `<div class="dist">${pct(e, l.price)}</div>` : ""}</div>
+      </div>`;
+    const entryWhy = [r.entry?.type ? `${r.entry.type}-Order` : "",
+      r.entry?.zoneLow != null && r.entry?.zoneHigh != null ? `Zone ${fmt(Math.min(r.entry.zoneLow, r.entry.zoneHigh))} – ${fmt(Math.max(r.entry.zoneLow, r.entry.zoneHigh))}` : ""].filter(Boolean).join(" · ");
+
+    const methods = Object.keys(METHOD_TITLES)
+      .filter((k) => typeof r.analysis[k] === "string" && r.analysis[k].trim())
+      .map((k, i) => `<details class="method"${i === 0 ? " open" : ""}><summary>${METHOD_TITLES[k]}</summary><p>${esc(r.analysis[k])}</p></details>`).join("");
+
+    card.innerHTML = `
+      <div class="result">
+        ${state.example ? `<div class="note"><b>Beispiel</b>So sieht eine Analyse aus. Lade oben deinen eigenen Chart hoch, um deinen Trade-Plan zu bekommen.</div>` : ""}
+        <div class="res-head">
+          <span class="verdict ${verdictClass(r.verdict)}">${verdictLabel(r.verdict)}</span>
+          <span class="meta">${meta || "Krypto-Chart"}${r.chart.currentPrice != null ? ` · Kurs ${fmt(r.chart.currentPrice)}` : ""}</span>
+          <div class="conf" title="Wie sicher das Setup laut Analyse ist"><span class="lbl">Sicherheit ${r.confidence}/10</span><div class="pips">${pips}</div></div>
+        </div>
+        ${r.summary ? `<p class="summary">${esc(r.summary)}</p>` : ""}
+        ${r.verdict === "kein_trade" && r.watchFor ? `<div class="note trigger"><b>Worauf du warten solltest</b>${esc(r.watchFor)}</div>` : ""}
+        ${hasLevels ? `
+          <div class="levels">
+            ${r.verdict === "kein_trade" ? `<div class="lv-foot"><span class="meta">Mögliches Szenario, noch kein Einstieg</span></div>` : ""}
+            ${lvRow("k-entry", "Einstieg", r.entry, entryWhy)}
+            ${lvRow("k-sl", "Stop-Loss", r.stopLoss, r.stopLoss.reason)}
+            ${lvRow("k-tp", "Take-Profit", r.takeProfit, r.takeProfit.reason)}
+            <div class="lv-foot">
+              <span class="crv"><small>Chance-Risiko</small>${c != null ? `1 : ${dec1(c)}` : "–"}</span>
+              <button type="button" class="btn ghost" id="copyBtn">Levels kopieren</button>
+            </div>
+          </div>` : ""}
+        ${r.entry?.trigger && r.verdict !== "kein_trade" ? `<div class="note trigger"><b>Wann einsteigen</b>${esc(r.entry.trigger)}</div>` : ""}
+        ${r.invalidation ? `<div class="note"><b>Idee ungültig, wenn</b>${esc(r.invalidation)}</div>` : ""}
+        ${warns.map((w) => `<div class="note warn"><b>Achtung</b>${esc(w)}</div>`).join("")}
+        ${r.confluence.length || r.risks.length ? `<div class="two">
+          ${r.confluence.length ? `<div class="list pro"><h3>Was dafür spricht</h3><ul>${r.confluence.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+          ${r.risks.length ? `<div class="list con"><h3>Risiken</h3><ul>${r.risks.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+        </div>` : ""}
+        ${methods ? `<div class="methods">${methods}</div>` : ""}
+        ${!state.example ? `
+          <form class="ask" id="askForm">
+            <label for="askInput" class="group-label">Rückfrage zur Analyse</label>
+            <div class="qa" id="qaList"></div>
+            <div class="ask-row">
+              <textarea id="askInput" rows="2" maxlength="600" placeholder="z. B. Was mache ich, wenn der Preis erst bis 96.700 fällt?"></textarea>
+              <button class="btn" type="submit" id="askBtn">Fragen</button>
+            </div>
+          </form>
+          <button type="button" class="btn ghost" id="rerunBtn">Neu analysieren</button>` : ""}
+      </div>`;
+
+    $("#copyBtn")?.addEventListener("click", copyLevels);
+    $("#askForm")?.addEventListener("submit", (ev) => { ev.preventDefault(); ask(); });
+    $("#rerunBtn")?.addEventListener("click", () => analyze(true));
+    renderQA();
+    renderOverlay();
+  }
+
+  function renderQA() {
+    const box = $("#qaList");
+    if (!box) return;
+    box.innerHTML = state.qa.map((x, i) => `<div><div class="q">${esc(x.q)}</div><div class="a" id="qa-a-${i}">${esc(x.a || "Denke nach …")}</div></div>`).join("");
+  }
+
+  async function copyLevels(ev) {
+    const r = state.result;
+    const sym = r.chart.symbol || state.params?.symbol || "";
+    const c = crv(r);
+    const txt = `${sym} ${verdictLabel(r.verdict)} | Entry ${fmt(r.entry.price)} | SL ${fmt(r.stopLoss.price)} | TP ${fmt(r.takeProfit.price)}${c != null ? ` | CRV 1:${dec1(c)}` : ""}`.trim();
+    const btn = ev.currentTarget;
+    try { await navigator.clipboard.writeText(txt); btn.textContent = "Kopiert"; }
+    catch { btn.textContent = txt; }
+    setTimeout(() => { if (btn.isConnected) btn.textContent = "Levels kopieren"; }, 2500);
+  }
+
+  function renderEmpty() {
+    state.result = null;
+    renderOverlay();
+    $("#resultCard").innerHTML = `
+      <div class="empty">
+        <h2>Chart geladen</h2>
+        <p>Prüfe links die Angaben und klicke auf <strong>Chart analysieren</strong>. Du bekommst Einstieg, Stop-Loss und Take-Profit mit Begründung.</p>
+        <p style="font-size:13px">Tipp: Die Preisachse rechts sollte im Screenshot gut lesbar sein.</p>
+      </div>`;
+  }
+
+  function renderBusy() {
+    $("#resultCard").innerHTML = `
+      <div class="busy">
+        <h2 style="font-size:18px">Chart wird analysiert</h2>
+        <div class="scan"></div>
+        <p class="meta" id="busyMsg">Claude liest Preisachse, Struktur und Levels. Das dauert meist 20 bis 90 Sekunden.</p>
+        <span class="elapsed" id="elapsed">0 s</span>
+      </div>`;
+  }
+
+  const ERR = {
+    not_granted: "Du hast der Seite nicht erlaubt, Claude zu nutzen. Lade die Seite neu, um es noch einmal zu erlauben.",
+    sampling_disabled: "Claude ist für dein Konto hier nicht verfügbar.",
+    not_declared: "Die KI-Analyse ist auf dieser Seite nicht aktiviert.",
+    capability_disabled: "Die KI-Analyse ist in dieser Ansicht nicht verfügbar.",
+    capability_removed: "Diese App-Version unterstützt die KI-Analyse nicht. Öffne die Seite im Browser auf claude.ai.",
+    images_unavailable: "Diese Ansicht kann keine Bilder an Claude senden. Öffne die Seite im Browser auf claude.ai.",
+    image_rejected: "Das Bild konnte nicht gelesen werden. Nimm einen PNG- oder JPG-Screenshot unter 20 MB.",
+    rate_limited: "Gerade zu viele Anfragen oder dein Claude-Nutzungslimit ist erreicht. Versuch es in ein paar Minuten noch einmal.",
+    session_expired: "Deine Anmeldung ist abgelaufen. Melde dich bei Claude neu an.",
+    refused: "Claude hat diese Anfrage abgelehnt. Prüfe, ob das Bild ein Trading-Chart ist.",
+    invalid_json: "Die Antwort war unvollständig. Klicke noch einmal auf Chart analysieren.",
+    empty_completion: "Es kam keine Antwort zurück. Klicke noch einmal auf Chart analysieren.",
+    prompt_too_large: "Die Notiz ist zu lang. Kürze sie und versuch es erneut.",
+    cancelled: "Analyse abgebrochen.",
+  };
+  const errText = (e) => ERR[e?.code] || "Die Verbindung wurde unterbrochen. Bitte versuch es noch einmal.";
+  const HIDE = ["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "images_unavailable"];
+
+  function renderError(e) {
+    $("#resultCard").innerHTML = `
+      <div class="empty">
+        <h2>${e?.code === "cancelled" ? "Abgebrochen" : "Analyse nicht möglich"}</h2>
+        <p>${esc(errText(e))}</p>
+      </div>`;
+    if (HIDE.includes(e?.code)) setAvail(false, errText(e));
+  }
+
+  // ---------- availability ----------
+  function setAvail(ok, msg) {
+    const n = $("#availNote");
+    state.canSample = ok;
+    n.hidden = ok;
+    if (!ok) n.textContent = msg || "Die KI-Analyse funktioniert nur, wenn du diese Seite angemeldet auf claude.ai öffnest.";
+    updateButtons();
+  }
+  function updateButtons() {
+    const busy = !!state.ctl;
+    $("#analyzeBtn").disabled = busy || !state.canSample || !state.blob || state.example;
+    $("#analyzeBtn").textContent = busy ? "Analysiere …" : state.example ? "Erst Chart hochladen" : "Chart analysieren";
+    $("#stopBtn").hidden = !busy;
+    const ab = $("#askBtn"); if (ab) ab.disabled = busy;
+  }
+
+  // ---------- prompt ----------
+  const STRATS = {
+    sr: "Support & Resistance: horizontale Zonen, Range-Hochs und -Tiefs, Ausbrüche und Retests.",
+    smc: "Smart Money Concepts / ICT: Marktstruktur (Break of Structure, Change of Character), Order Blocks, Fair Value Gaps, Liquidität über Hochs und unter Tiefs (Sweeps), Premium/Discount.",
+    trend: "Trend & Indikatoren: Trendlinien, höhere Hochs/Tiefs, EMAs, VWAP, RSI und andere Indikatoren. Werte nur Indikatoren aus, die im Bild wirklich zu sehen sind.",
+    candles: "Candlestick-Muster: Engulfing, Pin Bar/Hammer, Doji, Inside Bar, Ablehnungsdochte an wichtigen Levels.",
+  };
+  const ANALYSIS_KEY = { sr: "supportResistance", smc: "smartMoney", trend: "indicators", candles: "candles" };
+
+  function readParams() {
+    const strats = Object.keys(STRATS).filter((k) => $("#s-" + k).checked);
+    return {
+      symbol: $("#f-symbol").value.trim(), tf: $("#f-tf").value, dir: $("#f-dir").value,
+      price: toNum($("#f-price").value.trim()), note: $("#f-note").value.trim(),
+      strats: strats.length ? strats : Object.keys(STRATS),
+    };
+  }
+
+  function buildPrompt(p) {
+    const dirTxt = { both: "Long oder Short, was das Chartbild hergibt", long: "nur Long", short: "nur Short" }[p.dir];
+    const off = Object.keys(ANALYSIS_KEY).filter((k) => !p.strats.includes(k)).map((k) => `"${ANALYSIS_KEY[k]}"`);
+    return `Du bist ein erfahrener Krypto-Daytrader. Das angehängte Bild ist ein Screenshot eines Trading-Charts. Erstelle daraus einen konkreten, ehrlichen Daytrading-Plan.
+
+Angaben des Traders:
+- Markt: ${p.symbol || "nicht angegeben, bitte vom Chart ablesen"}
+- Zeiteinheit: ${p.tf || "nicht angegeben, bitte vom Chart ablesen"}
+- Erlaubte Richtung: ${dirTxt}
+- Aktueller Preis: ${p.price != null ? p.price : "nicht angegeben, bitte vom Chart ablesen (letzte Kerze bzw. Preismarke auf der Achse)"}
+- Notiz: ${p.note || "keine"}
+
+Nutze diese Methoden und suche Konfluenz zwischen ihnen:
+${p.strats.map((k) => "- " + STRATS[k]).join("\n")}
+
+Vorgehen:
+1. Lies die Preisachse (meist rechts) genau ab. Jeder Preis, den du nennst, muss zu den Achsenbeschriftungen passen und im sichtbaren Bereich oder knapp daneben liegen. Ist die Achse nicht lesbar, setze "priceAxisReadable": false und schätze so gut es geht.
+2. Bestimme Marktstruktur und Trend auf dieser Zeiteinheit.
+3. Wähle das beste Setup für einen Daytrade. Einstieg an einem sinnvollen Level (Retest, Order Block, FVG, Support/Resistance), nicht mitten in der Range und nicht hinterherlaufend nach einer großen Kerze.
+4. Stop-Loss hinter ein Strukturlevel (Swing-Tief/-Hoch, Order Block, Liquiditätszone), nicht so eng, dass normales Rauschen ihn auslöst.
+5. Take-Profit am nächsten realistischen Ziel (nächster Widerstand bzw. Support, Liquidität über Hochs/unter Tiefs, offene FVG). Strebe ein Chance-Risiko-Verhältnis von mindestens 1:1,5 an.
+6. Gibt es kein sauberes Setup, oder passt es nicht zur erlaubten Richtung, antworte mit "verdict": "kein_trade" und beschreibe in "watchFor" konkret mit Preisen, auf welches Szenario man warten sollte. Ein mögliches Szenario darfst du dann trotzdem in entry/stopLoss/takeProfit eintragen, sonst null. Lieber kein Trade als ein schlechter.
+7. "confidence" von 1 bis 10: wie klar und sauber das Setup ist.
+
+Für die Linien auf dem Chart: gib bei jedem Preis "y" an. Das ist die vertikale Position dieses Preises im Bild als Anteil der Bildhöhe (0 = oberer Bildrand, 1 = unterer Bildrand). Interpoliere anhand der Beschriftungen auf der Preisachse.
+
+Antworte NUR mit einem JSON-Objekt in genau dieser Form. Texte auf Deutsch, kurz und konkret. Preise als reine Zahlen ohne Tausendertrennzeichen mit Dezimalpunkt. Die Werte unten sind nur Platzhalter.
+{
+  "verdict": "long" | "short" | "kein_trade",
+  "confidence": 6,
+  "chart": { "symbol": "BTC/USDT", "timeframe": "15m", "currentPrice": 64250.5, "priceAxisReadable": true },
+  "summary": "1 bis 2 Sätze: welches Setup und warum.",
+  "entry": { "price": 64100, "y": 0.55, "type": "Limit" | "Stop" | "Market", "zoneLow": 64000, "zoneHigh": 64150, "trigger": "Wann genau einsteigen, z. B. welche Kerze worüber schließen muss." },
+  "stopLoss": { "price": 63700, "y": 0.68, "reason": "Warum genau hier." },
+  "takeProfit": { "price": 64900, "y": 0.3, "reason": "Warum genau hier." },
+  "keyLevels": [ { "price": 64000, "y": 0.58, "kind": "support" | "resistance" | "orderblock" | "fvg" | "liquidity" | "other", "label": "Kurzer Name" } ],
+  "analysis": { "structure": "…", "supportResistance": "…", "smartMoney": "…", "indicators": "…", "candles": "…" },
+  "confluence": ["Kurzer Punkt, der für den Trade spricht"],
+  "risks": ["Kurzer Punkt, der dagegen spricht"],
+  "invalidation": "Wann die Idee nicht mehr gilt, mit Preis.",
+  "watchFor": null
+}
+Gib 2 bis 5 keyLevels an.${off.length ? ` Setze in "analysis" ${off.join(", ")} auf null.` : ""}`;
+  }
+
+  // ---------- actions ----------
+  async function analyze(fresh) {
+    if (!state.sample || !state.blob || state.ctl || state.example) return;
+    state.params = readParams();
+    store.set(PKEY, { strats: state.params.strats, dir: state.params.dir, tf: state.params.tf, symbol: state.params.symbol });
+    const ctl = new AbortController();
+    state.ctl = ctl; state.qa = [];
+    updateButtons(); renderBusy(); renderOverlayClear();
+    const t0 = Date.now();
+    state.timer = setInterval(() => { const el = $("#elapsed"); if (el) el.textContent = Math.round((Date.now() - t0) / 1000) + " s"; }, 1000);
+    try {
+      const raw = await state.sample.json(buildPrompt(state.params), {
+        images: [state.blob], modelTier: "complex", signal: ctl.signal,
+        ...(fresh ? { cache: false } : {}),
+        onText: () => { const m = $("#busyMsg"); if (m && !m.dataset.w) { m.dataset.w = 1; m.textContent = "Trade-Plan wird geschrieben …"; } },
+      });
+      state.result = normalize(raw);
+      renderResult();
+      saveHistory();
+    } catch (e) {
+      renderError(e);
+    } finally {
+      clearInterval(state.timer);
+      state.ctl = null;
+      updateButtons();
+    }
+  }
+  function renderOverlayClear() { $("#overlay").innerHTML = ""; }
+
+  async function ask() {
+    const input = $("#askInput");
+    const q = input.value.trim();
+    if (!q || !state.sample || state.ctl || !state.result) return;
+    const item = { q, a: "" };
+    state.qa.push(item);
+    const idx = state.qa.length - 1;
+    input.value = "";
+    renderQA();
+    const ctl = new AbortController();
+    state.ctl = ctl; updateButtons();
+    const history = state.qa.slice(0, -1).filter((x) => x.a).slice(-3)
+      .map((x) => `Frage: ${x.q}\nAntwort: ${x.a}`).join("\n\n");
+    const prompt = `Du hast den angehängten Krypto-Chart für einen Daytrader analysiert. Deine Analyse als JSON:
+${JSON.stringify(state.result)}
+${history ? `\nBisherige Rückfragen:\n${history}\n` : ""}
+Neue Rückfrage des Traders: ${q}
+
+Antworte auf Deutsch, kurz und konkret (höchstens 150 Wörter), mit Preisen wo sinnvoll. Kein JSON, keine Überschriften. Keine Anlageberatung versprechen.`;
+    try {
+      const { text } = await state.sample(prompt, {
+        images: [state.blob], cache: false, signal: ctl.signal,
+        onText: ({ text }) => { item.a = text; const el = $("#qa-a-" + idx); if (el) el.textContent = text; },
+      });
+      item.a = text;
+    } catch (e) {
+      item.a = e?.text ? e.text + "\n(unterbrochen)" : errText(e);
+    } finally {
+      state.ctl = null; updateButtons(); renderQA();
+    }
+  }
+
+  // ---------- image input ----------
+  function setImage(blob, url, { example = false } = {}) {
+    if (state.imgUrl && state.imgUrl.startsWith("blob:")) URL.revokeObjectURL(state.imgUrl);
+    state.blob = blob; state.imgUrl = url; state.example = example;
+    $("#chartImg").src = url;
+    $("#exampleBadge").hidden = !example;
+    updateButtons();
+  }
+
+  function loadFile(file) {
+    if (!file || !/^image\/(png|jpe?g|webp|gif)$/i.test(file.type)) {
+      $("#resultCard").innerHTML = `<div class="empty"><h2>Datei nicht unterstützt</h2><p>Bitte einen Screenshot als PNG, JPG, WebP oder GIF hochladen.</p></div>`;
+      return;
+    }
+    if (state.ctl) state.ctl.abort();
+    state.qa = []; state.params = null;
+    setImage(file, URL.createObjectURL(file));
+    renderEmpty();
+  }
+
+  $("#file").addEventListener("change", (e) => { loadFile(e.target.files[0]); e.target.value = ""; });
+  const card = $("#chartCard");
+  ["dragenter", "dragover"].forEach((t) => card.addEventListener(t, (e) => { e.preventDefault(); card.classList.add("drag"); }));
+  ["dragleave", "drop"].forEach((t) => card.addEventListener(t, (e) => { e.preventDefault(); card.classList.remove("drag"); }));
+  card.addEventListener("drop", (e) => { const f = e.dataTransfer?.files?.[0]; if (f) loadFile(f); });
+  document.addEventListener("paste", (e) => {
+    const it = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
+    if (it) { e.preventDefault(); loadFile(it.getAsFile()); }
+  });
+  $("#form").addEventListener("submit", (e) => { e.preventDefault(); analyze(false); });
+  $("#stopBtn").addEventListener("click", () => state.ctl?.abort());
+  $("#showOverlay").addEventListener("change", renderOverlay);
+
+  // ---------- history ----------
+  function makeThumb() {
+    return new Promise((res) => {
+      const img = $("#chartImg");
+      try {
+        const w = Math.min(900, img.naturalWidth || 900);
+        const h = Math.round(w * (img.naturalHeight / img.naturalWidth)) || 500;
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        res(c.toDataURL("image/jpeg", 0.75));
+      } catch { res(null); }
+    });
+  }
+  async function saveHistory() {
+    const thumb = await makeThumb();
+    if (!thumb) return;
+    let list = store.get(HKEY, []);
+    list.unshift({ id: Date.now().toString(36), ts: Date.now(), thumb, result: state.result, params: state.params });
+    list = list.slice(0, 12);
+    while (list.length && !store.set(HKEY, list)) list.pop();
+    renderHistory();
+  }
+  function renderHistory() {
+    const list = store.get(HKEY, []);
+    const box = $("#histList");
+    if (!list.length) { box.innerHTML = `<p class="hist-empty">Noch keine eigenen Analysen. Jede Analyse wird hier gespeichert, damit du sie später wieder öffnen kannst.</p>`; return; }
+    box.innerHTML = list.map((h) => {
+      const r = h.result || {};
+      const c = r.entry && r.stopLoss && r.takeProfit ? crv(r) : null;
+      const sym = r.chart?.symbol || h.params?.symbol || "Chart";
+      const d = new Date(h.ts).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      return `<div class="hist" role="button" tabindex="0" data-id="${esc(h.id)}">
+        <img src="${h.thumb}" alt="">
+        <div class="hb">
+          <div class="ht"><span>${esc(sym)}</span><span class="hv ${verdictClass(r.verdict)}">${verdictLabel(r.verdict)}</span></div>
+          <div class="hd">${d}${c != null ? ` · CRV 1:${dec1(c)}` : ""}</div>
+        </div>
+        <button type="button" class="hist-del" data-del="${esc(h.id)}" aria-label="Analyse entfernen">×</button>
+      </div>`;
+    }).join("");
+  }
+  async function openHistory(id) {
+    const h = store.get(HKEY, []).find((x) => x.id === id);
+    if (!h || state.ctl) return;
+    const blob = await (await fetch(h.thumb)).blob();
+    state.qa = []; state.params = h.params || null;
+    setImage(blob, h.thumb);
+    state.result = normalize(h.result);
+    if (h.params) {
+      $("#f-symbol").value = h.params.symbol || ""; $("#f-tf").value = h.params.tf || "";
+      $("#f-dir").value = h.params.dir || "both";
+    }
+    renderResult();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  $("#histList").addEventListener("click", (e) => {
+    const del = e.target.closest("[data-del]");
+    if (del) { e.stopPropagation(); store.set(HKEY, store.get(HKEY, []).filter((x) => x.id !== del.dataset.del)); renderHistory(); return; }
+    const card = e.target.closest(".hist"); if (card) openHistory(card.dataset.id);
+  });
+  $("#histList").addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("hist")) { e.preventDefault(); openHistory(e.target.dataset.id); }
+  });
+
+  // ---------- example chart (drawn, clearly labelled) ----------
+  function tok(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function drawExample() {
+    const W = 1200, H = 700, axisW = 110, top = 36, bot = 44;
+    const pMin = 96300, pMax = 98100;
+    const yOf = (p) => top + ((pMax - p) / (pMax - pMin)) * (H - top - bot);
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    const C = { bg: tok("--chart-bg"), grid: tok("--chart-grid"), muted: tok("--muted"), ink: tok("--ink"), long: tok("--long"), short: tok("--short"), accent: tok("--accent"), accentInk: tok("--accent-ink"), line: tok("--line") };
+    g.fillStyle = C.bg; g.fillRect(0, 0, W, H);
+    g.font = "15px JetBrains Mono, monospace"; g.textBaseline = "middle";
+    for (let p = 96400; p <= 98000; p += 200) {
+      const y = yOf(p);
+      g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(0, y); g.lineTo(W - axisW, y); g.stroke();
+      g.fillStyle = C.muted; g.fillText(p.toLocaleString("de-DE"), W - axisW + 14, y);
+    }
+    g.strokeStyle = C.line; g.beginPath(); g.moveTo(W - axisW, 0); g.lineTo(W - axisW, H); g.stroke();
+    // candles
+    let s = 7; const rnd = () => { s |= 0; s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const wp = [[0, 96480], [8, 96840], [15, 96540], [22, 96880], [29, 96560], [36, 96860], [41, 96690], [44, 96890], [49, 97360], [54, 97610], [58, 97390], [62, 97110], [65, 96940]];
+    const n = 68, step = 11.6, x0 = 26;
+    const closes = [];
+    for (let i = 0; i < n; i++) {
+      let j = 0; while (j < wp.length - 1 && wp[j + 1][0] < i) j++;
+      const [i0, p0] = wp[j], [i1, p1] = wp[Math.min(j + 1, wp.length - 1)];
+      const base = i1 === i0 ? p1 : p0 + ((p1 - p0) * (i - i0)) / (i1 - i0);
+      closes.push(base + (rnd() - 0.5) * 90);
+    }
+    const candles = []; let prev = 96430;
+    for (let i = 0; i < n; i++) {
+      let o = prev, cl = closes[i];
+      let hi = Math.max(o, cl) + rnd() * 55, lo = Math.min(o, cl) - rnd() * 55;
+      if (i === 54) hi = 97620;
+      if (i === n - 2) { o = 96940; cl = 96830; hi = 96965; lo = 96760; }
+      if (i === n - 1) { o = 96830; cl = 97060; hi = 97085; lo = 96815; }
+      candles.push({ o, h: hi, l: lo, c: cl }); prev = cl;
+    }
+    candles.forEach((k, i) => {
+      const x = x0 + i * step, up = k.c >= k.o, col = up ? C.long : C.short;
+      g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 1.4;
+      g.beginPath(); g.moveTo(x, yOf(k.h)); g.lineTo(x, yOf(k.l)); g.stroke();
+      const yt = yOf(Math.max(k.o, k.c)), yb = yOf(Math.min(k.o, k.c));
+      g.fillRect(x - 3.6, yt, 7.2, Math.max(1.5, yb - yt));
+    });
+    // time axis
+    g.fillStyle = C.muted; g.font = "13px JetBrains Mono, monospace";
+    for (let i = 4; i < n; i += 16) {
+      const mins = 6 * 60 + i * 15, hh = String(Math.floor(mins / 60)).padStart(2, "0"), mm = String(mins % 60).padStart(2, "0");
+      g.fillText(`${hh}:${mm}`, x0 + i * step - 18, H - bot / 2);
+    }
+    // last price marker
+    const last = candles[n - 1].c, yl = yOf(last);
+    g.setLineDash([4, 4]); g.strokeStyle = C.accent; g.beginPath(); g.moveTo(0, yl); g.lineTo(W - axisW, yl); g.stroke(); g.setLineDash([]);
+    g.fillStyle = C.accent; g.fillRect(W - axisW + 4, yl - 13, axisW - 8, 26);
+    g.fillStyle = C.accentInk; g.font = "600 15px JetBrains Mono, monospace"; g.fillText(Math.round(last).toLocaleString("de-DE"), W - axisW + 12, yl);
+    g.fillStyle = C.muted; g.font = "600 16px IBM Plex Sans, sans-serif"; g.fillText("BTC/USDT · 15m", 210, 22);
+    return { url: c.toDataURL("image/png"), y: (p) => yOf(p) / H };
+  }
+
+  function exampleResult(y) {
+    return normalize({
+      verdict: "long", confidence: 7,
+      chart: { symbol: "BTC/USDT", timeframe: "15m", currentPrice: 97060, priceAxisReadable: true },
+      summary: "Ausbruch aus der Range 96.550 bis 96.890, danach Retest des alten Range-Hochs mit Liquiditäts-Sweep und bullischem Engulfing. Long am Retest mit Ziel über dem Hoch.",
+      entry: { price: 97000, y: y(97000), type: "Limit", zoneLow: 96890, zoneHigh: 97000, trigger: "Limit-Order bei 97.000 im Retest-Bereich. Nur gültig, solange keine 15m-Kerze unter 96.890 schließt." },
+      stopLoss: { price: 96680, y: y(96680), reason: "Unter dem Sweep-Tief 96.760 und zurück in der alten Range. Dort ist die Ausbruchsidee kaputt." },
+      takeProfit: { price: 97800, y: y(97800), reason: "Über dem Hoch 97.620 liegt Buy-Side-Liquidität. 97.800 liegt kurz vor dem Measured Move der Range." },
+      keyLevels: [
+        { price: 96890, y: y(96890), kind: "support", label: "Altes Range-Hoch" },
+        { price: 97620, y: y(97620), kind: "liquidity", label: "Hoch / Liquidität" },
+        { price: 96550, y: y(96550), kind: "support", label: "Range-Tief" },
+      ],
+      analysis: {
+        structure: "Seitwärtsrange, dann Break of Structure nach oben über 96.900. Seit dem Ausbruch höhere Hochs und höhere Tiefs.",
+        supportResistance: "96.890 war dreimal Widerstand und wird jetzt als Support getestet (Rollentausch).",
+        smartMoney: "Sweep der Sell-Side-Liquidität unter 96.890 bis 96.760, danach sofortige Rückeroberung. Bullischer Order Block bei 96.830 bis 96.940.",
+        indicators: "Keine Indikatoren eingeblendet. Trend auf 15m seit dem Ausbruch klar aufwärts.",
+        candles: "Bullisches Engulfing auf der letzten Kerze direkt am Support.",
+      },
+      confluence: ["Retest des alten Range-Hochs", "Liquiditäts-Sweep mit Rückeroberung", "Bullisches Engulfing", "Höhere Tiefs seit dem Ausbruch"],
+      risks: ["Schluss unter 96.890 würde den Ausbruch als Fehlausbruch zeigen", "Zur US-Eröffnung oft erhöhte Volatilität"],
+      invalidation: "15m-Schlusskurs unter 96.760.",
+      watchFor: null,
+    });
+  }
+
+  function showExample() {
+    const ex = drawExample();
+    setImage(null, ex.url, { example: true });
+    state.params = { symbol: "BTC/USDT", tf: "15m", dir: "both" };
+    state.result = exampleResult(ex.y);
+    renderResult();
+  }
+  const rethemeExample = () => { if (state.example) showExample(); };
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rethemeExample); } catch {}
+  new MutationObserver(rethemeExample).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // ---------- boot ----------
+  const prefs = store.get(PKEY, null);
+  if (prefs) {
+    if (Array.isArray(prefs.strats)) Object.keys(STRATS).forEach((k) => { $("#s-" + k).checked = prefs.strats.includes(k); });
+    if (prefs.dir) $("#f-dir").value = prefs.dir;
+    if (prefs.tf != null) $("#f-tf").value = prefs.tf;
+    if (prefs.symbol) $("#f-symbol").value = prefs.symbol;
+  }
+  showExample();
+  renderHistory();
+  updateButtons();
+  if (document.fonts?.ready) document.fonts.ready.then(rethemeExample);
+
+  (async () => {
+    let s = null;
+    try { s = window.claude?.use ? await window.claude.use("sample") : null; } catch { s = null; }
+    if (!s) { setAvail(false); return; }
+    state.sample = s;
+    const lim = await s.limits().catch(() => null);
+    if (!lim?.images) { setAvail(false, ERR.images_unavailable); return; }
+    setAvail(true);
+  })();
+})();
+</script>
